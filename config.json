@@ -1,21 +1,21 @@
 {
 	"head": {
-		"title": "SimonAKing",
-		"description": "Author:SimonAKing,Category:Personal Blog",
+		"title": "上善若水，上水唯泉",
+		"description": "邓甲倍的个人博客",
 		"favicon": "favicon.ico"
 	},
 	"intro": {
-		"title": "SimonAKing",
-		"subtitle": "Front back left right end engineer",
-		"enter": "enter",
-		"supportAuthor": true,
+		"title": "上善若水，上水唯泉",
+		"subtitle": "你的输入决定了你的输出",
+		"enter": "开启",
+		"supportAuthor": false,
 		"background": true
 	},
 	"main": {
-		"name": "SimonAKing",
-		"signature": "Code & Input & Output",
+		"name": "邓甲倍",
+		"signature": "生命诚可贵，爱情价更高",
 		"avatar": {
-			"link": "assets/avatar.jpg",
+			"link": "assets/avatar.png",
 			"height": "100",
 			"width": "100"
 		},
@@ -23,22 +23,22 @@
 			"first": {
 				"href": "blog/",
 				"icon": "bokeyuan",
-				"text": "Blog"
+				"text": "博客"
 			},
 			"second": {
 				"href": "about/",
 				"icon": "xiaolian",
-				"text": "About"
+				"text": "关于"
 			},
 			"third": {
-				"href": "mailto:hi@simonaking.com",
+				"href": "https://new.dengjiabei.cn",
 				"icon": "email",
-				"text": "Email"
+				"text": "新闻"
 			},
 			"fourth": {
-				"href": "https://github.com/SimonAKing",
+				"href": "https://github.com/bello96",
 				"icon": "github",
-				"text": "Github"
+				"text": "代码"
 			}
 		}
 	}
