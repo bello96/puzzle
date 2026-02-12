@@ -1,0 +1,49 @@
+doctype html
+html(lang="zh-CN")
+	head
+		title #{about.title} - #{head.title}
+
+		meta(charset="utf-8")
+		meta(name="viewport" content="width=device-width,initial-scale=1,maximum-scale=2")
+		meta(http-equiv="X-UA-Compatible" content="IE=edge,chrome=1")
+		meta(name="renderer" content="webkit")
+
+		meta(name="theme-color" content="#222325")
+		meta(name="apple-mobile-web-app-status-bar-style" content="#222325")
+		meta(name="msapplication-navbutton-color" content="#222325")
+
+		link(rel="stylesheet" href="https://cdn.jsdelivr.net/gh/SimonAKing/font/font.min.css")
+		link(rel="stylesheet" href="../css/style.css")
+
+		meta(name="description" content=`${about.description}`)
+		link(rel="icon" href=`../${head.favicon}` type="image/x-icon")
+		link(rel="shortcut icon" href=`../${head.favicon}` type="image/x-icon")
+
+	body
+		.page-container
+			nav.page-nav
+				a.back-home(href="../")
+					span ← 返回首页
+
+			.page-header
+				img.about-avatar(src=`../${main.avatar.link}` width="120" height="120" alt="avatar")
+				h1.page-title #{about.title}
+				p.page-desc #{about.description}
+
+			.page-content
+				.about-section
+					h2 关于我
+					p #{about.bio}
+
+				.about-section
+					h2 技能
+					ul.skill-list
+						each skill in about.skills
+							li.skill-item #{skill}
+
+				.about-section
+					h2 联系方式
+					ul.contact-list
+						each contact in about.contacts
+							li.contact-item
+								a(href=contact.link target="_blank") #{contact.text}

@@ -53,13 +53,65 @@ gulp.task('pug', function () {
 		.pipe(gulp.dest('./dist'))
 })
 
+gulp.task('pug-blog', function () {
+	return gulp
+		.src('./src/blog.pug')
+		.pipe(pug({ data: config }))
+		.pipe(gulp.dest('./dist/blog'))
+})
+
+gulp.task('pug-about', function () {
+	return gulp
+		.src('./src/about.pug')
+		.pipe(pug({ data: config }))
+		.pipe(gulp.dest('./dist/about'))
+})
+
 gulp.task('assets', function () {
 	return gulp
 		.src(['./src/assets/**/*'])
 		.pipe(gulp.dest('./dist/assets'));
 })
 
-gulp.task('build', gulp.series('clean', 'assets', 'pug', 'css', 'js', 'html'))
+gulp.task('html-blog', function () {
+	return gulp
+		.src('./dist/blog/blog.html')
+		.pipe(htmlclean())
+		.pipe(htmlmin())
+		.pipe(gulp.dest('./dist/blog'))
+})
+
+gulp.task('html-about', function () {
+	return gulp
+		.src('./dist/about/about.html')
+		.pipe(htmlclean())
+		.pipe(htmlmin())
+		.pipe(gulp.dest('./dist/about'))
+})
+
+gulp.task('rename-blog', function (done) {
+	const fs = require('fs')
+	const path = require('path')
+	const src = path.join(__dirname, 'dist/blog/blog.html')
+	const dest = path.join(__dirname, 'dist/blog/index.html')
+	if (fs.existsSync(src)) {
+		fs.renameSync(src, dest)
+	}
+	done()
+})
+
+gulp.task('rename-about', function (done) {
+	const fs = require('fs')
+	const path = require('path')
+	const src = path.join(__dirname, 'dist/about/about.html')
+	const dest = path.join(__dirname, 'dist/about/index.html')
+	if (fs.existsSync(src)) {
+		fs.renameSync(src, dest)
+	}
+	done()
+})
+
+gulp.task('build', gulp.series('clean', 'assets', 'pug', 'pug-blog', 'pug-about', 'css', 'js', 'html', 'html-blog', 'html-about', 'rename-blog', 'rename-about'))
 gulp.task('default', gulp.series('build'))
 
 gulp.task('watch', function () {

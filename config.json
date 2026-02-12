@@ -11,6 +11,30 @@
 		"supportAuthor": false,
 		"background": true
 	},
+	"blog": {
+		"title": "博客",
+		"description": "记录技术与生活",
+		"posts": [
+			{
+				"title": "欢迎来到我的博客",
+				"summary": "这是我的第一篇博客文章，记录生活与技术的点点滴滴。",
+				"date": "2026-02-12",
+				"link": "#"
+			}
+		]
+	},
+	"about": {
+		"title": "关于我",
+		"description": "了解更多关于我的信息",
+		"bio": "你好，我是邓甲倍。热爱技术，热爱生活。相信你的输入决定了你的输出。",
+		"skills": ["JavaScript", "HTML/CSS", "Node.js", "Vue.js", "Git"],
+		"contacts": [
+			{
+				"text": "GitHub - bello96",
+				"link": "https://github.com/bello96"
+			}
+		]
+	},
 	"main": {
 		"name": "邓甲倍",
 		"signature": "生命诚可贵，爱情价更高",
