@@ -1,20 +1,18 @@
 # SimonAKing-HomePage
 
-[中文版说明](<README.zh_CN.md>)
+## 项目简介
 
-## Introduction
-
-> A modern and elegant personal homepage with fluid animation background, responsive design and smooth page transitions.
+> 一个现代优雅的个人主页，具有流体动画背景、响应式设计和流畅的页面过渡效果。
 
 ![preview](https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExMncyb3oyc21zc3czejU3cGk4M2tiNTdkaTM0N3FodGVpZmU5azNxaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/fhXFCZEogq39rOpKUi/giphy.gif)
 
-[Online browsing](http://simonaking.com)
+[在线浏览](http://simonaking.com)
 
-Do you want to install such a cool homepage for your website?
+嗯哼，你想为网站装上如此酷炫的主页吗?
 
-Let's start now!
+下面就让我们开始吧！
 
-## Install
+## 安装步骤
 
 ```sh
 git clone https://github.com/SimonAKing/HomePage.git
@@ -23,143 +21,133 @@ npm install
 npm run dev
 ```
 
-## Features
+## 功能特性
 
-1. Highly encapsulates all the information in the page
-2. Use [WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/) as background
-3. Use `less` as `css` preprocessor
-4. Use `pug` as `html` preprocessor
-5. Use `gulp` as a build tool and configure the build script
-6. Comfortable animation and beautiful UI
-7. Responsive, mobile support
-8. The referenced `css` and`js` files do not exceed `18.5` kb in total!
-9. Delayed response switch page event
-10. There are many features left for you to explore...
+1. 高度封装了页面中的所有的信息
+2. 使用 [WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/) 作为背景
+3. 使用 `less` 作为 `css` 预处理器
+4. 使用 `pug` 作为 `html` 预处理器
+5. 使用 `gulp` 作为构建工具, 并以配置好构建脚本
+6. 令人舒服的动画 , 以及漂亮的 `UI`
+7. 响应式，无缝支持移动端
+8. 所引用的 `css` 与 `js` 文件总共超不过 `18.5` kb!
+9. 延迟响应切换页面事件
+10. 还有很多特性留给你探索...
 
+## 项目结构
 
-## Structure
+根据项目特点,一共分为两大类 ：
 
-According to the characteristics of the project, it is divided into two categories：
-1. `intro` First screen
-2. `main` Secondary screen
+1. `intro` 首屏
+2. `main` 副屏
 
-The corresponding functions, styles and configurations are also based on this standard.
+相应的函数，样式，配置也是根据此标准来的。
 
+## 基本配置
 
+配置文件 `config.json` 中的每一项键名 , 都与相应的组件名所对应。
 
-## Basic configuration
-
-Each key name in the config.json file`config.json` corresponds to the corresponding component name.
-
-such as：
+比如：
 
 ```json
 {
-	"head": {
-		"title": "SimonAKing",
-		"description": "Category:Personal Blog",
-		"favicon": "favicon.ico"
-	}
+  "head": {
+    "title": "SimonAKing",
+    "description": "Category:Personal Blog",
+    "favicon": "favicon.ico"
+  }
 }
-
 ```
-The above configuration information corresponds to the information in the following `layout/head.pug` component.
+
+上面的配置信息就对应着下面 `layout/head.pug` 组件中的信息。
+
 ```html
-head
-	title #{head.title}
-	meta(charset="utf-8")
-	meta(name="Description" content=`${head.description}`)
-	link(rel="icon" href=`${head.favicon}` type="image/x-icon")
+head title #{head.title} meta(charset="utf-8") meta(name="Description"
+content=`${head.description}`) link(rel="icon" href=`${head.favicon}`
+type="image/x-icon")
 ```
 
-
-
-## Advanced configuration
+## 高级配置
 
 ### WebGL-Fluid-Simulation
 
-Use [WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/) as background at home.
+首页使用[WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/)作为背景。
 
-If you want to turn it off, set `intro.background: false`.
+如需关闭，请设置`intro.background: false`。
 
 ### supportAuthor
 
-The `supportAuthor` option is turned on by default for configuration information, that is, authors are supported.
+配置信息默认开启了 `supportAuthor` 选项，即支持作者。
 
-All support items are as follows：
+所有的支持项如下：
 
-1. The `octopus cat` will be displayed in the upper right corner of the home page.
-2. The console prints the author's site information
+1. 会在首页右上角显示 `章鱼猫`
+2. 控制台会打印作者的站点信息
 
-If you want to turn it off, set `intro.author: false`.
+如需关闭，请设置`intro.supportAuthor: false`。
 
+### 图标的替换
 
-### Icon replacement
-Icons in the project, all from [阿里巴巴矢量图标库](https://www.iconfont.cn)
+项目中的图标，全部来自 [阿里巴巴矢量图标库](https://www.iconfont.cn)
 
-The replacement steps are as follows:
+替换步骤如下:
 
-1. Please select your icon, add it to the project, and change the color to white.
-2. Click Font Class method
-3. Copy the contents of the generated link
-4. Replace the contents of the file `/src/css/common/icon.less`, where the contents of the `icon` selector must be preserved.
-5. Config.json the corresponding item in the `config.json`file`main.ul. * .icon`
+1. 请选择好你的图标，添加到项目后，把颜色全部调成白色。
+2. 点击 Font Class 方式
+3. 复制生成的链接中的内容
+4. 替换 文件 `css/common/icon.less` 中的内容 ，其中 `icon` 选择器中的内容必须保留。
+5. 配置 `config.json` 文件中的相应项 `main.ul.*.icon`
 
 ```css
 .icon {
-	display: block;
-	width: 1.5em;
-	height: 1.5em;
-	margin: 0 auto;
-	fill: currentColor;
-	font-family: 'iconfont' !important;
-	font-size: inherit;
-	font-style: normal;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
+  display: block;
+  width: 1.5em;
+  height: 1.5em;
+  margin: 0 auto;
+  fill: currentColor;
+  font-family: "iconfont" !important;
+  font-size: inherit;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 ```
 
+## 项目部署
 
+在根目录下执行`npm run build` 后，会将项目文件生成到 `dist` 目录。
 
-## Deployment
+然后，你可以将`dist`目录部署到你喜欢的服务器托管商。
 
-After executing `npm run build` under the root directory, the project file will be generated to the `dist` directory.
+下面以`GithubPage` 举例：
 
-You can then deploy the dist directory to your favorite server hosting provider.
-
-The following is an example of `GithubPage`:
-
-1. create `userName.github.io` Repo
+1. 新建 `你的用户名.github.io` 仓库
 
 2. ```sh
    cd dist
    git init
    git add -A
    git commit -am"init"
-   git remote add origin https://github.com/userName/userName.github.io.git
+   git remote add origin https://github.com/你的用户名/你的用户名.github.io.git
    git push -f origin master
    ```
 
-3. Then set the repo's Github Page option in GitHub.
+3. 然后在`Github`设置好仓库的`GithubPage` 选项
 
-4. Visit `username.github.io` to browse!
+4. 访问 `你的用户名.github.io` 即可浏览啦！
 
+假如你之前的`用户名.github.io`仓库已经有内容了,可以新建另一个的仓库，比如`blog`。
 
+再将所占用项目迁移到`blog`，并设置好这个仓库的`GithubPage` 选项。
 
-If your previous `username. github.io` repo already has content, you can create another repo, such as `blog`.
+而这个仓库即成为了一个子目录`用户名.github.io/blog`。
 
- Then migrate the occupied items to `blog` and set the `GithubPage` option for this repo.
+如此一来，你的`用户名.github.io`仓库便可留给首页了！
 
- The repo became a subdirectory of `username. github.io/blog`.
+## 赞助
 
- In this way, your `username. github.io` repo can be left to the home page!
+开发一个优秀的项目，离不开大量时间和精力的投入。
 
+如果此项目给你带来了帮助，欢迎赞助,`star`。
 
-
-## Sponsor
-I spent a lot of time and energy to develop this project.
-
-If this project has brought you help, welcome to sponsor, `star`.
-
-Thank you!
+谢谢！

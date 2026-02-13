@@ -8,10 +8,7 @@ const del = require('del')
 const babel = require('gulp-babel')
 const autoprefixer = require('gulp-autoprefixer')
 const connect = require('gulp-connect')
-const pug = require('gulp-pug')
 const less = require('gulp-less')
-
-const config = require('./config.json')
 
 gulp.task('clean', function () {
 	return del(['./dist/css/', './dist/js/'])
@@ -21,7 +18,7 @@ gulp.task('css', function () {
 	return gulp
 	.src('./src/css/*.less')
 	.pipe(less().on('error', function(err) {
-		console.log(err);
+console.log(err);
 		this.emit('end');
 	}))
 	.pipe(minifycss({ compatibility: 'ie8' }))
@@ -32,10 +29,26 @@ gulp.task('css', function () {
 
 gulp.task('html', function () {
 	return gulp
-		.src('./dist/index.html')
+		.src('./src/index.html')
 		.pipe(htmlclean())
 		.pipe(htmlmin())
 		.pipe(gulp.dest('./dist'))
+})
+
+gulp.task('html-blog', function () {
+	return gulp
+		.src('./src/blog/index.html')
+		.pipe(htmlclean())
+		.pipe(htmlmin())
+		.pipe(gulp.dest('./dist/blog'))
+})
+
+gulp.task('html-about', function () {
+	return gulp
+		.src('./src/about/index.html')
+		.pipe(htmlclean())
+		.pipe(htmlmin())
+		.pipe(gulp.dest('./dist/about'))
 })
 
 gulp.task('js', function () {
@@ -46,82 +59,22 @@ gulp.task('js', function () {
 		.pipe(gulp.dest('./dist/js'))
 })
 
-gulp.task('pug', function () {
-	return gulp
-		.src('./src/index.pug')
-		.pipe(pug({ data: config }))
-		.pipe(gulp.dest('./dist'))
-})
-
-gulp.task('pug-blog', function () {
-	return gulp
-		.src('./src/blog.pug')
-		.pipe(pug({ data: config }))
-		.pipe(gulp.dest('./dist/blog'))
-})
-
-gulp.task('pug-about', function () {
-	return gulp
-		.src('./src/about.pug')
-		.pipe(pug({ data: config }))
-		.pipe(gulp.dest('./dist/about'))
-})
-
 gulp.task('assets', function () {
 	return gulp
 		.src(['./src/assets/**/*'])
 		.pipe(gulp.dest('./dist/assets'));
 })
 
-gulp.task('html-blog', function () {
-	return gulp
-		.src('./dist/blog/blog.html')
-		.pipe(htmlclean())
-		.pipe(htmlmin())
-		.pipe(gulp.dest('./dist/blog'))
-})
-
-gulp.task('html-about', function () {
-	return gulp
-		.src('./dist/about/about.html')
-		.pipe(htmlclean())
-		.pipe(htmlmin())
-		.pipe(gulp.dest('./dist/about'))
-})
-
-gulp.task('rename-blog', function (done) {
-	const fs = require('fs')
-	const path = require('path')
-	const src = path.join(__dirname, 'dist/blog/blog.html')
-	const dest = path.join(__dirname, 'dist/blog/index.html')
-	if (fs.existsSync(src)) {
-		fs.renameSync(src, dest)
-	}
-	done()
-})
-
-gulp.task('rename-about', function (done) {
-	const fs = require('fs')
-	const path = require('path')
-	const src = path.join(__dirname, 'dist/about/about.html')
-	const dest = path.join(__dirname, 'dist/about/index.html')
-	if (fs.existsSync(src)) {
-		fs.renameSync(src, dest)
-	}
-	done()
-})
-
-gulp.task('build', gulp.series('clean', 'assets', 'pug', 'pug-blog', 'pug-about', 'css', 'js', 'html', 'html-blog', 'html-about', 'rename-blog', 'rename-about'))
+gulp.task('build', gulp.series('clean', 'assets', 'html', 'html-blog', 'html-about', 'css', 'js'))
 gulp.task('default', gulp.series('build'))
 
 gulp.task('watch', function () {
-	gulp.watch('./src/components/*.pug', gulp.parallel('pug'))
-	gulp.watch('./src/index.pug', gulp.parallel('pug'))
-	gulp.watch('./src/css/**/*.scss', gulp.parallel(['css']))
+	gulp.watch('./src/**/*.html', gulp.parallel('html', 'html-blog', 'html-about'))
+	gulp.watch('./src/css/**/*.less', gulp.parallel(['css']))
 	gulp.watch('./src/js/*.js', gulp.parallel(['js']))
 	connect.server({
-		root: 'dist',
-		livereload: true,
-		port: 8080
-	})
+root: 'dist',
+livereload: true,
+port: 8080
+})
 })
