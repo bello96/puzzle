@@ -357,13 +357,13 @@ export class PuzzleRoom extends DurableObject {
     // 生成拼图边缘数据
     const edges = generateEdges(d);
 
-    // 生成散落位置
+    // 生成散落位置（堆叠在棋盘区域内，模拟倒出拼图的效果）
     const pieceStates: PieceState[] = [];
     for (let i = 0; i < total; i++) {
       pieceStates.push({
         id: i,
-        x: 1.1 + Math.random() * 0.7,
-        y: 0.05 + Math.random() * 0.85,
+        x: 0.1 + Math.random() * 0.6,
+        y: 0.1 + Math.random() * 0.6,
         placed: false,
       });
     }

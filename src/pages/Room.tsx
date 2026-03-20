@@ -306,7 +306,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
 
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：主区域 */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-auto">
+        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-hidden">
           {/* 等待阶段 */}
           {phase === "waiting" && (
             <div className="text-center">
@@ -394,7 +394,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
             imageUrl &&
             pieceStates.length > 0 &&
             edges.length > 0 && (
-              <div className="flex flex-col items-center gap-3 w-full h-full">
+              <div className="flex flex-col items-center gap-2 w-full h-full overflow-visible">
                 {/* 状态栏 */}
                 <div className="flex items-center gap-4 text-sm text-gray-600 flex-shrink-0">
                   <span>

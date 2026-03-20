@@ -62,8 +62,8 @@ export default function PuzzleBoard({
         return;
       }
       const h = containerRef.current.clientHeight - 30;
-      const w = containerRef.current.clientWidth * 0.42;
-      setBoardSize(Math.max(200, Math.min(h, w, 520)));
+      const w = containerRef.current.clientWidth - 30;
+      setBoardSize(Math.max(250, Math.min(h, w, 560)));
     }
     update();
     window.addEventListener("resize", update);
@@ -219,8 +219,8 @@ export default function PuzzleBoard({
   return (
     <div
       ref={containerRef}
-      className="relative flex-1"
-      style={{ minHeight: boardSize + 30, overflow: "visible" }}
+      className="relative flex-1 w-full"
+      style={{ minHeight: boardSize + 30 }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
