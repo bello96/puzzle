@@ -23,11 +23,19 @@ export interface ChatMessage {
   kind: "chat" | "system";
 }
 
+/* ── 拼图块状态 ── */
+export interface PieceState {
+  id: number;
+  x: number;      // 归一化坐标 (0-1 = 拼图区域内)
+  y: number;
+  placed: boolean; // 是否已吸附到正确位置
+}
+
 /* ── Client → Server ── */
 export type ClientMessage =
   | { type: "join"; playerName: string; playerId?: string }
   | { type: "shuffle"; difficulty: number }
-  | { type: "move"; fromIndex: number; toIndex: number }
+  | { type: "movePiece"; pieceId: number; x: number; y: number }
   | { type: "chat"; text: string }
   | { type: "transfer" }
   | { type: "playAgain" }
@@ -40,7 +48,8 @@ export type ServerMessage =
       players: PlayerInfo[];
       uploaderId: string | null;
       phase: GamePhase;
-      pieces: number[];
+      pieceStates: PieceState[];
+      edges: number[][][];
       difficulty: number;
       imageReady: boolean;
       yourId: string;
@@ -51,14 +60,20 @@ export type ServerMessage =
   | { type: "playerJoined"; player: PlayerInfo }
   | { type: "playerLeft"; playerId: string }
   | { type: "imageUploaded" }
-  | { type: "shuffled"; pieces: number[]; difficulty: number; startTime: number }
   | {
-      type: "moved";
-      fromIndex: number;
-      toIndex: number;
-      pieces: number[];
+      type: "shuffled";
+      pieceStates: PieceState[];
+      edges: number[][][];
+      difficulty: number;
+      startTime: number;
+    }
+  | {
+      type: "pieceMoved";
+      pieceId: number;
+      x: number;
+      y: number;
+      placed: boolean;
       moveCount: number;
-      solved: boolean;
     }
   | { type: "solved"; solverName: string; time: number; moveCount: number }
   | { type: "phaseChange"; phase: GamePhase; uploaderId: string | null }

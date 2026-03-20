@@ -9,6 +9,7 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import type {
   ChatMessage,
   GamePhase,
+  PieceState,
   PlayerInfo,
   ServerMessage,
 } from "../types/protocol";
@@ -29,7 +30,8 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [uploaderId, setUploaderId] = useState<string | null>(null);
   const [phase, setPhase] = useState<GamePhase>("waiting");
-  const [pieces, setPieces] = useState<number[]>([]);
+  const [pieceStates, setPieceStates] = useState<PieceState[]>([]);
+  const [edges, setEdges] = useState<number[][][]>([]);
   const [difficulty, setDifficulty] = useState(4);
   const [imageReady, setImageReady] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
   } | null>(null);
 
   const playerIdRef = useRef(
-    sessionStorage.getItem(`puzzle_pid_${roomCode}`) || genId()
+    sessionStorage.getItem(`puzzle_pid_${roomCode}`) || genId(),
   );
 
   useEffect(() => {
@@ -56,11 +58,10 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
   /* ── WebSocket ── */
   const wsUrl = useMemo(
     () => `${getWsBase()}/api/rooms/${roomCode}/ws`,
-    [roomCode]
+    [roomCode],
   );
   const { connected, send, addListener, leave } = useWebSocket(wsUrl);
 
-  // 连接后发 join
   const joinedRef = useRef(false);
   useEffect(() => {
     if (connected && !joinedRef.current) {
@@ -102,7 +103,6 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
     return () => clearInterval(timer);
   }, [startTime, phase]);
 
-  /* ── 系统消息辅助 ── */
   function addSystemMsg(text: string) {
     setMessages((prev) => [
       ...prev,
@@ -126,7 +126,8 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           setPlayers(msg.players);
           setUploaderId(msg.uploaderId);
           setPhase(msg.phase);
-          setPieces(msg.pieces);
+          setPieceStates(msg.pieceStates);
+          setEdges(msg.edges);
           setDifficulty(msg.difficulty);
           setSelectedDifficulty(msg.difficulty);
           setImageReady(msg.imageReady);
@@ -142,7 +143,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           setPlayers((p) => {
             if (p.find((x) => x.id === msg.player.id)) {
               return p.map((x) =>
-                x.id === msg.player.id ? { ...x, online: true } : x
+                x.id === msg.player.id ? { ...x, online: true } : x,
               );
             }
             return [...p, msg.player];
@@ -161,7 +162,8 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           break;
 
         case "shuffled":
-          setPieces(msg.pieces);
+          setPieceStates(msg.pieceStates);
+          setEdges(msg.edges);
           setDifficulty(msg.difficulty);
           setSelectedDifficulty(msg.difficulty);
           setStartTime(msg.startTime);
@@ -169,11 +171,19 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           setPhase("solving");
           setSolveResult(null);
           setShowConfetti(false);
-          addSystemMsg(`拼图已打乱 (${msg.difficulty}×${msg.difficulty})，开始拼图！`);
+          addSystemMsg(
+            `拼图已打乱 (${msg.difficulty}×${msg.difficulty})，开始拼图！`,
+          );
           break;
 
-        case "moved":
-          setPieces(msg.pieces);
+        case "pieceMoved":
+          setPieceStates((prev) =>
+            prev.map((p) =>
+              p.id === msg.pieceId
+                ? { ...p, x: msg.x, y: msg.y, placed: msg.placed }
+                : p,
+            ),
+          );
           setMoveCount(msg.moveCount);
           break;
 
@@ -186,7 +196,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           });
           setShowConfetti(true);
           addSystemMsg(
-            `${msg.solverName} 完成了拼图！用时 ${formatTime(msg.time)}，${msg.moveCount} 步`
+            `${msg.solverName} 完成了拼图！用时 ${formatTime(msg.time)}，${msg.moveCount} 步`,
           );
           setTimeout(() => setShowConfetti(false), 5000);
           break;
@@ -217,7 +227,8 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
 
         case "playAgainStarted":
           setPhase("uploading");
-          setPieces([]);
+          setPieceStates([]);
+          setEdges([]);
           setImageReady(false);
           setImageUrl(null);
           setStartTime(null);
@@ -257,8 +268,8 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
     send({ type: "shuffle", difficulty: selectedDifficulty });
   }
 
-  function handleMove(from: number, to: number) {
-    send({ type: "move", fromIndex: from, toIndex: to });
+  function handleMovePiece(pieceId: number, x: number, y: number) {
+    send({ type: "movePiece", pieceId, x, y });
   }
 
   function handleChat(text: string) {
@@ -300,7 +311,9 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           {phase === "waiting" && (
             <div className="text-center">
               <div className="text-6xl mb-4">🧩</div>
-              <div className="text-lg text-gray-500 mb-2">等待另一位玩家加入</div>
+              <div className="text-lg text-gray-500 mb-2">
+                等待另一位玩家加入
+              </div>
               <div className="text-sm text-gray-400">
                 分享房间号{" "}
                 <span className="font-mono font-bold text-primary">
@@ -317,12 +330,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
               <div className="text-lg font-medium mb-4 text-gray-700">
                 选择一张图片作为拼图
               </div>
-              <ImageUpload
-                roomCode={roomCode}
-                onUploaded={() => {
-                  /* imageUploaded 消息会处理 */
-                }}
-              />
+              <ImageUpload roomCode={roomCode} onUploaded={() => {}} />
             </div>
           )}
 
@@ -330,11 +338,13 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           {phase === "uploading" && !isUploader && (
             <div className="text-center">
               <div className="text-5xl mb-4">⏳</div>
-              <div className="text-lg text-gray-500">等待出题者上传图片...</div>
+              <div className="text-lg text-gray-500">
+                等待出题者上传图片...
+              </div>
             </div>
           )}
 
-          {/* 准备阶段 - 出题者看到图片预览 + 难度选择 + 打乱按钮 */}
+          {/* 准备阶段 - 出题者 */}
           {phase === "ready" && isUploader && imageUrl && (
             <div className="flex flex-col items-center gap-4">
               <div className="text-lg font-medium text-gray-700">
@@ -369,7 +379,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
             </div>
           )}
 
-          {/* 准备阶段 - 拼图者等待 */}
+          {/* 准备阶段 - 拼图者 */}
           {phase === "ready" && !isUploader && (
             <div className="text-center">
               <div className="text-5xl mb-4">🎯</div>
@@ -379,13 +389,14 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
             </div>
           )}
 
-          {/* 拼图阶段 */}
+          {/* 拼图 / 完成 阶段 */}
           {(phase === "solving" || phase === "solved") &&
             imageUrl &&
-            pieces.length > 0 && (
-              <div className="flex flex-col items-center gap-3 w-full">
+            pieceStates.length > 0 &&
+            edges.length > 0 && (
+              <div className="flex flex-col items-center gap-3 w-full h-full">
                 {/* 状态栏 */}
-                <div className="flex items-center gap-4 text-sm text-gray-600">
+                <div className="flex items-center gap-4 text-sm text-gray-600 flex-shrink-0">
                   <span>
                     用时：
                     <span className="font-mono font-bold text-primary">
@@ -407,11 +418,12 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
 
                 {/* 拼图面板 */}
                 <PuzzleBoard
-                  pieces={pieces}
+                  pieceStates={pieceStates}
                   difficulty={difficulty}
+                  edges={edges}
                   imageUrl={imageUrl}
                   canInteract={isSolver && phase === "solving"}
-                  onMove={handleMove}
+                  onMovePiece={handleMovePiece}
                 />
 
                 {/* 参考图（拼图者可展开） */}
@@ -421,13 +433,14 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
 
                 {/* 完成后操作 */}
                 {phase === "solved" && solveResult && (
-                  <div className="text-center mt-2">
+                  <div className="text-center mt-2 flex-shrink-0">
                     <div className="text-xl font-bold text-primary mb-1">
                       拼图完成！
                     </div>
                     <div className="text-gray-500 text-sm mb-3">
-                      {solveResult.solverName} 用时 {formatTime(solveResult.time)}
-                      ，共 {solveResult.moveCount} 步
+                      {solveResult.solverName} 用时{" "}
+                      {formatTime(solveResult.time)}，共{" "}
+                      {solveResult.moveCount} 步
                     </div>
                     {isUploader && (
                       <div className="flex gap-2 justify-center">
@@ -451,9 +464,9 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
                   </div>
                 )}
 
-                {/* 出题者可随时重新打乱 */}
+                {/* 出题者可重新打乱 */}
                 {isUploader && phase === "solving" && (
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2 mt-1 flex-shrink-0">
                     <select
                       className="border rounded-lg px-2 py-1 text-sm"
                       value={selectedDifficulty}
@@ -492,7 +505,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
 function ReferenceImage({ imageUrl }: { imageUrl: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center flex-shrink-0">
       <button
         className="text-xs text-gray-400 hover:text-primary"
         onClick={() => setOpen(!open)}
@@ -510,7 +523,6 @@ function ReferenceImage({ imageUrl }: { imageUrl: string }) {
   );
 }
 
-/* ── 格式化时间 ── */
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
