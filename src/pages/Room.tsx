@@ -33,7 +33,6 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
   const [phase, setPhase] = useState<GamePhase>("waiting");
   const [pieceStates, setPieceStates] = useState<PieceState[]>([]);
   const [edges, setEdges] = useState<number[][][]>([]);
-  const [difficulty, setDifficulty] = useState(4);
   const [imageReady, setImageReady] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -49,6 +48,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
   } | null>(null);
 
   const playerIdRef = useRef(playerId);
+  const confettiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── WebSocket ── */
   const wsUrl = useMemo(
@@ -119,7 +119,6 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
           setPhase(msg.phase);
           setPieceStates(msg.pieceStates);
           setEdges(msg.edges);
-          setDifficulty(msg.difficulty);
           setSelectedDifficulty(msg.difficulty);
           setImageReady(msg.imageReady);
           setStartTime(msg.startTime);
@@ -151,9 +150,8 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
         case "shuffled":
           setPieceStates(msg.pieceStates);
           setEdges(msg.edges);
-          setDifficulty(msg.difficulty);
           setSelectedDifficulty(msg.difficulty);
-          setStartTime(msg.startTime || null);
+          setStartTime(msg.startTime > 0 ? msg.startTime : null);
           setMoveCount(0);
           setPhase("ready");
           setSolveResult(null);
@@ -180,7 +178,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
           addSystemMsg(
             `${msg.solverName} 完成拼图！用时 ${fmt(msg.time)}，${msg.moveCount} 步`,
           );
-          setTimeout(() => setShowConfetti(false), 5000);
+          confettiTimerRef.current = setTimeout(() => setShowConfetti(false), 5000);
           break;
         case "phaseChange":
           setPhase(msg.phase);
@@ -246,6 +244,15 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [roomCode]);
+
+  /* ── 组件卸载清理 ── */
+  useEffect(() => {
+    return () => {
+      if (confettiTimerRef.current) {
+        clearTimeout(confettiTimerRef.current);
+      }
+    };
+  }, []);
 
   const isUploader = myId === uploaderId;
   const isSolver = myId !== null && myId !== uploaderId && uploaderId !== null;
@@ -357,7 +364,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                   )}
 
                   <span className="text-xs text-gray-400">
-                    {difficulty}×{difficulty}
+                    {selectedDifficulty}×{selectedDifficulty}
                   </span>
 
                   <div className="flex-1" />
@@ -449,7 +456,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                 <div className="flex-1 bg-white rounded-xl shadow-sm overflow-hidden min-h-0 relative">
                   <PuzzleBoard
                     pieceStates={pieceStates}
-                    difficulty={difficulty}
+                    difficulty={selectedDifficulty}
                     edges={edges}
                     imageUrl={imageUrl}
                     canInteract={isSolver && phase === "solving"}
