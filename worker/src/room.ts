@@ -40,7 +40,7 @@ interface WsAttachment {
 const MAX_PLAYERS = 2;
 const GRACE_PERIOD = 30_000;
 const QUICK_GRACE = 5_000;
-const INACTIVITY_TIMEOUT = 10 * 60_000;
+const INACTIVITY_TIMEOUT = 5 * 60_000;
 const MAX_CHAT_HISTORY = 200;
 const IMAGE_CHUNK_SIZE = 100_000;
 const SNAP_THRESHOLD = 0.06; // 拼图吸附阈值（归一化坐标）
@@ -126,10 +126,13 @@ export class PuzzleRoom extends DurableObject {
       const contentType = request.headers.get("Content-Type") || "image/jpeg";
       await this.storeImage(new Uint8Array(data), contentType);
       this.imageReady = true;
-      this.phase = "ready";
-      await this.save({ imageReady: true, phase: "ready" });
+      await this.save({ imageReady: true });
       this.broadcast({ type: "imageUploaded" });
-      this.broadcast({ type: "phaseChange", phase: "ready", uploaderId: this.uploaderId });
+      // 上传后自动打乱但进入 ready（可看不可拼）
+      const uploaderAtt = this.findUploaderAttachment();
+      if (uploaderAtt) {
+        await this.doShuffle(this.difficulty);
+      }
       return new Response("ok");
     }
 
@@ -243,11 +246,20 @@ export class PuzzleRoom extends DurableObject {
     await this.save({ lastActivityAt: this.lastActivityAt });
 
     switch (msg.type as string) {
+      case "ping":
+        // 心跳，仅更新活跃时间
+        break;
+      case "confirmStart":
+        await this.onConfirmStart(att);
+        break;
       case "shuffle":
         await this.onShuffle(att, msg.difficulty as number);
         break;
       case "movePiece":
         await this.onMovePiece(att, msg.pieceId as number, msg.x as number, msg.y as number);
+        break;
+      case "giveUp":
+        await this.onGiveUp(att);
         break;
       case "chat":
         await this.onChat(att, msg.text as string);
@@ -306,7 +318,11 @@ export class PuzzleRoom extends DurableObject {
 
       const existing = this.findWsByPlayerId(requestedId);
       if (existing) {
+        // 先清除旧连接的 attachment，防止 webSocketClose 误触发 handleDisconnect
+        this.setAttachment(existing, null as unknown as WsAttachment);
         try { existing.close(1000, "Replaced"); } catch { /* ignore */ }
+        // 同时清理可能残留的断线记录
+        this.disconnectedPlayers.delete(requestedId);
         this.setAttachment(ws, { playerId: requestedId, playerName });
         this.sendRoomState(ws, requestedId);
         return;
@@ -328,65 +344,85 @@ export class PuzzleRoom extends DurableObject {
       await this.save({ uploaderId: playerId });
     }
 
-    const allPlayers = this.getActivePlayers();
-    if (allPlayers.length === 2 && this.phase === "waiting") {
-      this.phase = "uploading";
-      await this.save({ phase: "uploading" });
-    }
-
     this.broadcastExcept(ws, {
       type: "playerJoined",
       player: { id: playerId, name: playerName, online: true },
     });
 
+    const allPlayers = this.getActivePlayers();
+    if (allPlayers.length === 2 && this.phase === "waiting") {
+      this.phase = "uploading";
+      await this.save({ phase: "uploading" });
+      this.broadcast({ type: "phaseChange", phase: "uploading", uploaderId: this.uploaderId });
+    }
+
     this.sendRoomState(ws, playerId);
     this.scheduleAlarm();
   }
 
-  private async onShuffle(att: WsAttachment, difficulty: number) {
-    if (att.playerId !== this.uploaderId) {
-      return;
-    }
-    if (this.phase !== "ready" && this.phase !== "solving") {
-      return;
-    }
-
+  /** 打乱拼图（不改 phase，由调用方决定） */
+  private async doShuffle(difficulty: number) {
     const d = Math.max(3, Math.min(6, Math.floor(difficulty)));
     const total = d * d;
-
-    // 生成拼图边缘数据
     const edges = generateEdges(d);
-
-    // 生成散落位置（堆叠在棋盘区域内，模拟倒出拼图的效果）
     const pieceStates: PieceState[] = [];
     for (let i = 0; i < total; i++) {
       pieceStates.push({
         id: i,
-        x: 0.1 + Math.random() * 0.6,
-        y: 0.1 + Math.random() * 0.6,
+        x: -0.97 + Math.random() * 0.87,  // -0.97 ~ -0.10，不覆盖棋盘
+        y: 0.02 + Math.random() * 0.88,  // 0.02 ~ 0.90
         placed: false,
       });
     }
-
     this.difficulty = d;
     this.pieceStates = pieceStates;
     this.edges = edges;
-    this.startTime = Date.now();
+    this.startTime = null;
     this.moveCount = 0;
-    this.phase = "solving";
-
+    this.phase = "ready";
     await this.save({
       difficulty: d, pieceStates, edges,
-      startTime: this.startTime, moveCount: 0, phase: "solving",
+      startTime: null, moveCount: 0, phase: "ready",
     });
-
     this.broadcast({
-      type: "shuffled",
-      pieceStates,
-      edges,
-      difficulty: d,
-      startTime: this.startTime,
+      type: "shuffled", pieceStates, edges, difficulty: d, startTime: 0,
     });
+  }
+
+  /** 出题者确认开始 → ready → solving，计时开始 */
+  private async onConfirmStart(att: WsAttachment) {
+    if (att.playerId !== this.uploaderId) {
+      return;
+    }
+    if (this.phase !== "ready") {
+      return;
+    }
+    this.phase = "solving";
+    this.startTime = Date.now();
+    await this.save({ phase: "solving", startTime: this.startTime });
+    this.broadcast({ type: "phaseChange", phase: "solving", uploaderId: this.uploaderId });
+  }
+
+  /** 拼图者放弃 → 重新打乱回到 ready */
+  private async onGiveUp(att: WsAttachment) {
+    if (att.playerId === this.uploaderId) {
+      return;
+    }
+    if (this.phase !== "solving") {
+      return;
+    }
+    await this.doShuffle(this.difficulty);
+  }
+
+  /** 出题者重新打乱（仅 ready 阶段） */
+  private async onShuffle(att: WsAttachment, difficulty: number) {
+    if (att.playerId !== this.uploaderId) {
+      return;
+    }
+    if (this.phase !== "ready") {
+      return;
+    }
+    await this.doShuffle(difficulty);
   }
 
   private async onMovePiece(att: WsAttachment, pieceId: number, x: number, y: number) {
@@ -560,6 +596,11 @@ export class PuzzleRoom extends DurableObject {
       const grace = dp.quickLeave ? QUICK_GRACE : GRACE_PERIOD;
       if (now - dp.disconnectedAt >= grace) {
         this.disconnectedPlayers.delete(id);
+        // 如果玩家已经在另一个 WebSocket 上重连了，不要踢掉
+        const stillConnected = this.findWsByPlayerId(id);
+        if (stillConnected) {
+          continue;
+        }
         this.broadcast({ type: "playerLeft", playerId: id });
         await this.handlePlayerRemoved(id);
       }
@@ -620,6 +661,17 @@ export class PuzzleRoom extends DurableObject {
       }
     }
     return null;
+  }
+
+  private findUploaderAttachment(): WsAttachment | null {
+    if (!this.uploaderId) {
+      return null;
+    }
+    const ws = this.findWsByPlayerId(this.uploaderId);
+    if (!ws) {
+      return null;
+    }
+    return this.getAttachment(ws);
   }
 
   private removePlayer(playerId: string) {

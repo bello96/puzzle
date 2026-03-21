@@ -1,10 +1,10 @@
 /* ── 游戏阶段 ── */
 export type GamePhase =
-  | "waiting"   // 等待第二位玩家
-  | "uploading" // 等待出题者上传图片
-  | "ready"     // 图片已上传，等待打乱
-  | "solving"   // 拼图进行中
-  | "solved";   // 拼图完成
+  | "waiting" // 等待第二位玩家
+  | "uploading" // 等待出图者上传图片
+  | "ready" // 图片已上传，等待打乱
+  | "solving" // 拼图进行中
+  | "solved"; // 拼图完成
 
 /* ── 玩家信息 ── */
 export interface PlayerInfo {
@@ -26,7 +26,7 @@ export interface ChatMessage {
 /* ── 拼图块状态 ── */
 export interface PieceState {
   id: number;
-  x: number;      // 归一化坐标 (0-1 = 拼图区域内)
+  x: number; // 归一化坐标 (0-1 = 拼图区域内)
   y: number;
   placed: boolean; // 是否已吸附到正确位置
 }
@@ -34,8 +34,10 @@ export interface PieceState {
 /* ── Client → Server ── */
 export type ClientMessage =
   | { type: "join"; playerName: string; playerId?: string }
+  | { type: "confirmStart" }
   | { type: "shuffle"; difficulty: number }
   | { type: "movePiece"; pieceId: number; x: number; y: number }
+  | { type: "giveUp" }
   | { type: "chat"; text: string }
   | { type: "transfer" }
   | { type: "playAgain" }

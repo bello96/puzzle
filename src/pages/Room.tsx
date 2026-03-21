@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getHttpBase, getWsBase } from "../api";
+import expandCollapseIcon from "../assets/expand-collapse-icon.png";
 import ChatPanel from "../components/ChatPanel";
 import Confetti from "../components/Confetti";
 import ImageUpload, { DIFFICULTIES } from "../components/ImageUpload";
@@ -17,6 +18,7 @@ import type {
 interface Props {
   roomCode: string;
   nickname: string;
+  playerId: string;
   onLeave: () => void;
 }
 
@@ -24,8 +26,7 @@ function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export default function Room({ roomCode, nickname, onLeave }: Props) {
-  /* ── 游戏状态 ── */
+export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
   const [myId, setMyId] = useState<string | null>(null);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [uploaderId, setUploaderId] = useState<string | null>(null);
@@ -47,13 +48,7 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
     moveCount: number;
   } | null>(null);
 
-  const playerIdRef = useRef(
-    sessionStorage.getItem(`puzzle_pid_${roomCode}`) || genId(),
-  );
-
-  useEffect(() => {
-    sessionStorage.setItem(`puzzle_pid_${roomCode}`, playerIdRef.current);
-  }, [roomCode]);
+  const playerIdRef = useRef(playerId);
 
   /* ── WebSocket ── */
   const wsUrl = useMemo(
@@ -62,10 +57,9 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
   );
   const { connected, send, addListener, leave } = useWebSocket(wsUrl);
 
-  const joinedRef = useRef(false);
+  // 每次连接成功都发 join（首次加入或断线重连）
   useEffect(() => {
-    if (connected && !joinedRef.current) {
-      joinedRef.current = true;
+    if (connected) {
       send({
         type: "join",
         playerName: nickname,
@@ -74,7 +68,6 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
     }
   }, [connected, nickname, send]);
 
-  /* ── 获取图片 ── */
   const fetchImage = useCallback(async () => {
     try {
       const res = await fetch(`${getHttpBase()}/api/rooms/${roomCode}/image`);
@@ -88,11 +81,10 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
         });
       }
     } catch {
-      // 忽略
+      /* ignore */
     }
   }, [roomCode]);
 
-  /* ── 计时器 ── */
   useEffect(() => {
     if (!startTime || phase !== "solving") {
       return;
@@ -117,7 +109,6 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
     ]);
   }
 
-  /* ── 消息处理 ── */
   useEffect(() => {
     const unsub = addListener((msg: ServerMessage) => {
       switch (msg.type) {
@@ -138,7 +129,6 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
             fetchImage();
           }
           break;
-
         case "playerJoined":
           setPlayers((p) => {
             if (p.find((x) => x.id === msg.player.id)) {
@@ -150,32 +140,25 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           });
           addSystemMsg(`${msg.player.name} 加入了房间`);
           break;
-
         case "playerLeft":
           setPlayers((p) => p.filter((x) => x.id !== msg.playerId));
           break;
-
         case "imageUploaded":
           setImageReady(true);
           fetchImage();
           addSystemMsg("图片已上传，准备打乱拼图");
           break;
-
         case "shuffled":
           setPieceStates(msg.pieceStates);
           setEdges(msg.edges);
           setDifficulty(msg.difficulty);
           setSelectedDifficulty(msg.difficulty);
-          setStartTime(msg.startTime);
+          setStartTime(msg.startTime || null);
           setMoveCount(0);
-          setPhase("solving");
+          setPhase("ready");
           setSolveResult(null);
           setShowConfetti(false);
-          addSystemMsg(
-            `拼图已打乱 (${msg.difficulty}×${msg.difficulty})，开始拼图！`,
-          );
           break;
-
         case "pieceMoved":
           setPieceStates((prev) =>
             prev.map((p) =>
@@ -186,7 +169,6 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           );
           setMoveCount(msg.moveCount);
           break;
-
         case "solved":
           setPhase("solved");
           setSolveResult({
@@ -196,16 +178,19 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           });
           setShowConfetti(true);
           addSystemMsg(
-            `${msg.solverName} 完成了拼图！用时 ${formatTime(msg.time)}，${msg.moveCount} 步`,
+            `${msg.solverName} 完成拼图！用时 ${fmt(msg.time)}，${msg.moveCount} 步`,
           );
           setTimeout(() => setShowConfetti(false), 5000);
           break;
-
         case "phaseChange":
           setPhase(msg.phase);
           setUploaderId(msg.uploaderId);
+          // confirmStart → solving 时开始计时
+          if (msg.phase === "solving") {
+            setStartTime(Date.now());
+            setElapsed(0);
+          }
           break;
-
         case "chat":
           setMessages((prev) => [
             ...prev,
@@ -219,12 +204,10 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
             },
           ]);
           break;
-
         case "transferDone":
           setUploaderId(msg.uploaderId);
-          addSystemMsg("出题者已更换");
+          addSystemMsg("出图者已更换");
           break;
-
         case "playAgainStarted":
           setPhase("uploading");
           setPieceStates([]);
@@ -237,61 +220,61 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
           setShowConfetti(false);
           addSystemMsg("新一局开始，等待上传图片");
           break;
-
         case "error":
           addSystemMsg(`错误：${msg.message}`);
+          // 房间已满或不存在 → 返回首页
+          if (msg.message === "房间已满" || msg.message === "房间已关闭") {
+            setTimeout(onLeave, 1500);
+          }
           break;
-
         case "roomClosed":
           addSystemMsg(`房间已关闭：${msg.reason}`);
+          setTimeout(onLeave, 1500);
           break;
       }
     });
     return unsub;
   }, [addListener, fetchImage]);
 
-  /* ── beacon 快速离开 ── */
   useEffect(() => {
     function handlePageHide() {
-      const url = `${getHttpBase()}/api/rooms/${roomCode}/quickleave`;
-      navigator.sendBeacon(url, playerIdRef.current);
+      navigator.sendBeacon(
+        `${getHttpBase()}/api/rooms/${roomCode}/quickleave`,
+        playerIdRef.current,
+      );
     }
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [roomCode]);
 
-  /* ── 操作 ── */
   const isUploader = myId === uploaderId;
   const isSolver = myId !== null && myId !== uploaderId && uploaderId !== null;
 
-  function handleShuffle() {
-    send({ type: "shuffle", difficulty: selectedDifficulty });
-  }
+  /* ── 聊天面板展开/收起 ── */
+  const [chatOpen, setChatOpen] = useState(() => window.innerWidth >= 900);
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth < 900) {
+        setChatOpen(false);
+      }
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   function handleMovePiece(pieceId: number, x: number, y: number) {
     send({ type: "movePiece", pieceId, x, y });
   }
-
-  function handleChat(text: string) {
-    send({ type: "chat", text });
-  }
-
-  function handleTransfer() {
-    send({ type: "transfer" });
-  }
-
   function handleLeave() {
     leave();
     onLeave();
   }
 
-  function handlePlayAgain() {
-    send({ type: "playAgain" });
-  }
-
   /* ── 渲染 ── */
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div
+      className={`flex flex-col h-screen bg-gray-50 gap-3 pl-3 pt-3 pb-3 pr-3`}
+    >
       <Confetti show={showConfetti} />
 
       <PlayerBar
@@ -300,231 +283,291 @@ export default function Room({ roomCode, nickname, onLeave }: Props) {
         uploaderId={uploaderId}
         myId={myId}
         phase={phase}
-        onTransfer={handleTransfer}
+        onTransfer={() => send({ type: "transfer" })}
         onLeave={handleLeave}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-1 gap-3 min-h-0 relative">
         {/* 左侧：主区域 */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-hidden">
-          {/* 等待阶段 */}
-          {phase === "waiting" && (
-            <div className="text-center">
-              <div className="text-6xl mb-4">🧩</div>
-              <div className="text-lg text-gray-500 mb-2">
-                等待另一位玩家加入
-              </div>
-              <div className="text-sm text-gray-400">
-                分享房间号{" "}
-                <span className="font-mono font-bold text-primary">
-                  {roomCode}
-                </span>{" "}
-                给好友
-              </div>
+        <div className="flex flex-col flex-1 gap-3 min-h-0">
+          {/* 等待 / 上传 / 准备 阶段 */}
+          {(phase === "waiting" || phase === "uploading") && (
+            <div className="flex-1 flex items-center justify-center bg-white rounded-xl shadow-sm">
+              {phase === "waiting" && (
+                <div className="text-center">
+                  <div className="text-5xl mb-4 animate-bounce">🧩</div>
+                  <div className="text-gray-500 font-medium mb-1">
+                    等待另一位玩家加入
+                  </div>
+                  <div className="text-sm text-gray-400">
+                    分享房间号{" "}
+                    <span className="font-mono font-bold text-indigo-600">
+                      {roomCode}
+                    </span>{" "}
+                    给好友
+                  </div>
+                </div>
+              )}
+
+              {phase === "uploading" && isUploader && !imageReady && (
+                <div className="text-center">
+                  <div className="text-gray-700 font-medium mb-4">
+                    选择一张图片作为拼图
+                  </div>
+                  <ImageUpload roomCode={roomCode} onUploaded={() => {}} />
+                </div>
+              )}
+
+              {phase === "uploading" && !isUploader && (
+                <div className="text-center">
+                  <div className="text-4xl mb-3">⏳</div>
+                  <div className="text-gray-500">等待出图者上传图片...</div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* 上传阶段 - 出题者 */}
-          {phase === "uploading" && isUploader && !imageReady && (
-            <div className="text-center">
-              <div className="text-lg font-medium mb-4 text-gray-700">
-                选择一张图片作为拼图
-              </div>
-              <ImageUpload roomCode={roomCode} onUploaded={() => {}} />
-            </div>
-          )}
-
-          {/* 上传阶段 - 拼图者 */}
-          {phase === "uploading" && !isUploader && (
-            <div className="text-center">
-              <div className="text-5xl mb-4">⏳</div>
-              <div className="text-lg text-gray-500">
-                等待出题者上传图片...
-              </div>
-            </div>
-          )}
-
-          {/* 准备阶段 - 出题者 */}
-          {phase === "ready" && isUploader && imageUrl && (
-            <div className="flex flex-col items-center gap-4">
-              <div className="text-lg font-medium text-gray-700">
-                图片已上传，选择难度并打乱
-              </div>
-              <img
-                src={imageUrl}
-                alt="拼图原图"
-                className="w-64 h-64 object-cover rounded-xl shadow-md"
-              />
-              <div className="flex gap-2">
-                {DIFFICULTIES.map((d) => (
-                  <button
-                    key={d.value}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      selectedDifficulty === d.value
-                        ? "bg-primary text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                    onClick={() => setSelectedDifficulty(d.value)}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                className="bg-primary text-white rounded-lg px-8 py-2.5 font-medium hover:bg-primary-dark text-lg"
-                onClick={handleShuffle}
-              >
-                随机打乱
-              </button>
-            </div>
-          )}
-
-          {/* 准备阶段 - 拼图者 */}
-          {phase === "ready" && !isUploader && (
-            <div className="text-center">
-              <div className="text-5xl mb-4">🎯</div>
-              <div className="text-lg text-gray-500">
-                图片已上传，等待出题者打乱拼图...
-              </div>
-            </div>
-          )}
-
-          {/* 拼图 / 完成 阶段 */}
-          {(phase === "solving" || phase === "solved") &&
+          {/* ready / solving / solved 阶段：拼图界面 */}
+          {(phase === "ready" || phase === "solving" || phase === "solved") &&
             imageUrl &&
             pieceStates.length > 0 &&
             edges.length > 0 && (
-              <div className="flex flex-col items-center gap-2 w-full h-full overflow-visible">
-                {/* 状态栏 */}
-                <div className="flex items-center gap-4 text-sm text-gray-600 flex-shrink-0">
-                  <span>
-                    用时：
-                    <span className="font-mono font-bold text-primary">
-                      {phase === "solved" && solveResult
-                        ? formatTime(solveResult.time)
-                        : formatTime(elapsed)}
-                    </span>
-                  </span>
-                  <span>
-                    步数：
-                    <span className="font-mono font-bold text-primary">
-                      {moveCount}
-                    </span>
-                  </span>
+              <>
+                {/* 工具栏（固定高度） */}
+                <div className="flex items-center gap-3 px-3 h-11 bg-white rounded-xl shadow-sm flex-shrink-0">
+                  {/* 计时 + 步数（solving/solved 才显示） */}
+                  {phase !== "ready" && (
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-gray-500">
+                        用时{" "}
+                        <span className="font-mono font-bold text-indigo-600">
+                          {phase === "solved" && solveResult
+                            ? fmt(solveResult.time)
+                            : fmt(elapsed)}
+                        </span>
+                      </span>
+                      <div className="w-px h-5 bg-gray-200" />
+                      <span className="text-gray-500">
+                        步数{" "}
+                        <span className="font-mono font-bold text-indigo-600">
+                          {moveCount}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+
                   <span className="text-xs text-gray-400">
                     {difficulty}×{difficulty}
                   </span>
+
+                  <div className="flex-1" />
+
+                  {/* ready 阶段：出图者选难度 + 确认 + 重新上传 */}
+                  {phase === "ready" && isUploader && (
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="px-2 py-1 text-sm border border-gray-300 rounded-lg outline-none"
+                        value={selectedDifficulty}
+                        onChange={(e) => {
+                          const d = Number(e.target.value);
+                          setSelectedDifficulty(d);
+                          send({ type: "shuffle", difficulty: d });
+                        }}
+                      >
+                        {DIFFICULTIES.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="px-3 py-1.5 text-sm rounded-lg transition bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        onClick={() =>
+                          send({
+                            type: "shuffle",
+                            difficulty: selectedDifficulty,
+                          })
+                        }
+                      >
+                        重新打乱
+                      </button>
+                      <button
+                        className="px-3 py-1.5 text-sm rounded-lg transition bg-indigo-600 text-white hover:bg-indigo-700 font-medium"
+                        onClick={() => send({ type: "confirmStart" })}
+                      >
+                        确认开始
+                      </button>
+                      <button
+                        className="px-3 py-1.5 text-sm rounded-lg transition bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        onClick={() => send({ type: "playAgain" })}
+                      >
+                        换图
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ready 阶段：拼图者等待 */}
+                  {phase === "ready" && !isUploader && (
+                    <span className="text-sm text-gray-400">
+                      等待出图者确认开始...
+                    </span>
+                  )}
+
+                  {/* solving：拼图者参考图 + 放弃 */}
+                  {isSolver && phase === "solving" && (
+                    <div className="flex items-center gap-2">
+                      <RefToggle imageUrl={imageUrl} />
+                      <button
+                        className="px-3 py-1.5 text-sm rounded-lg transition bg-red-50 text-red-600 hover:bg-red-100"
+                        onClick={() => send({ type: "giveUp" })}
+                      >
+                        放弃
+                      </button>
+                    </div>
+                  )}
+
+                  {/* solved：提示 + 出图者操作 */}
+                  {phase === "solved" && solveResult && (
+                    <span className="text-sm text-green-600 font-medium">
+                      🎉 {solveResult.solverName} 完成！用时{" "}
+                      {fmt(solveResult.time)}，{solveResult.moveCount} 步
+                    </span>
+                  )}
+                  {phase === "solved" && solveResult && isUploader && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-3 py-1.5 text-sm rounded-lg transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                        onClick={() => send({ type: "playAgain" })}
+                      >
+                        再来一局
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 拼图面板 */}
-                <PuzzleBoard
-                  pieceStates={pieceStates}
-                  difficulty={difficulty}
-                  edges={edges}
-                  imageUrl={imageUrl}
-                  canInteract={isSolver && phase === "solving"}
-                  onMovePiece={handleMovePiece}
-                />
-
-                {/* 参考图（拼图者可展开） */}
-                {isSolver && phase === "solving" && (
-                  <ReferenceImage imageUrl={imageUrl} />
-                )}
-
-                {/* 完成后操作 */}
-                {phase === "solved" && solveResult && (
-                  <div className="text-center mt-2 flex-shrink-0">
-                    <div className="text-xl font-bold text-primary mb-1">
-                      拼图完成！
+                <div className="flex-1 bg-white rounded-xl shadow-sm overflow-hidden min-h-0 relative">
+                  <PuzzleBoard
+                    pieceStates={pieceStates}
+                    difficulty={difficulty}
+                    edges={edges}
+                    imageUrl={imageUrl}
+                    canInteract={isSolver && phase === "solving"}
+                    onMovePiece={handleMovePiece}
+                  />
+                  {/* ready 阶段蒙层：双方都不可拖拽 */}
+                  {phase === "ready" && (
+                    <div className="absolute inset-0 bg-white/20 z-20 rounded-xl" />
+                  )}
+                  {/* solving 出图者蒙层 */}
+                  {isUploader && phase === "solving" && (
+                    <div className="absolute inset-0 bg-white/30 flex items-center justify-center z-20 rounded-xl">
+                      <span className="text-gray-400 text-sm bg-white/80 px-4 py-2 rounded-lg shadow-sm">
+                        对方正在努力拼图...
+                      </span>
                     </div>
-                    <div className="text-gray-500 text-sm mb-3">
-                      {solveResult.solverName} 用时{" "}
-                      {formatTime(solveResult.time)}，共{" "}
-                      {solveResult.moveCount} 步
-                    </div>
-                    {isUploader && (
-                      <div className="flex gap-2 justify-center">
-                        <button
-                          className="bg-primary text-white rounded-lg px-6 py-2 font-medium hover:bg-primary-dark"
-                          onClick={handlePlayAgain}
-                        >
-                          再来一局
-                        </button>
-                        <button
-                          className="bg-orange-50 text-orange-600 rounded-lg px-6 py-2 font-medium hover:bg-orange-100"
-                          onClick={() => {
-                            handleTransfer();
-                            setTimeout(handlePlayAgain, 300);
-                          }}
-                        >
-                          换人出题
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 出题者可重新打乱 */}
-                {isUploader && phase === "solving" && (
-                  <div className="flex items-center gap-2 mt-1 flex-shrink-0">
-                    <select
-                      className="border rounded-lg px-2 py-1 text-sm"
-                      value={selectedDifficulty}
-                      onChange={(e) =>
-                        setSelectedDifficulty(Number(e.target.value))
-                      }
-                    >
-                      {DIFFICULTIES.map((d) => (
-                        <option key={d.value} value={d.value}>
-                          {d.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="text-sm px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      onClick={handleShuffle}
-                    >
-                      重新打乱
-                    </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </>
             )}
         </div>
 
-        {/* 右侧：聊天 */}
-        <div className="w-72 flex-shrink-0">
-          <ChatPanel messages={messages} onSend={handleChat} />
+        {/* 右侧：聊天面板（可收起） */}
+        <div
+          className="relative min-h-0 flex-shrink-0 transition-all duration-300 ease-in-out overflow-visible"
+          style={{ width: chatOpen ? 320 : 0 }}
+        >
+          {chatOpen && (
+            <div className="w-[320px] h-full relative">
+              <ChatPanel
+                messages={messages}
+                myId={myId}
+                onSend={(text) => send({ type: "chat", text })}
+              />
+              {/* 收起按钮：聊天右上角 */}
+              <button
+                className="absolute top-2 right-3 z-20 w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 transition"
+                onClick={() => setChatOpen(false)}
+                title="收起聊天"
+              >
+                <img
+                  src={expandCollapseIcon}
+                  alt=""
+                  className="w-3.5 h-3.5 opacity-50"
+                />
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* 收起状态：半圆按钮吸附右边缘 */}
+        {!chatOpen && (
+          <button
+            className="fixed z-30 flex items-center justify-center bg-white hover:bg-gray-50 transition"
+            style={{
+              right: 0,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 20,
+              height: 25,
+              borderRadius: "16px 0 0 16px",
+              boxShadow: "-1px 0 6px rgba(0,0,0,0.08)",
+            }}
+            onClick={() => setChatOpen(true)}
+            title="展开聊天"
+          >
+            <img
+              src={expandCollapseIcon}
+              alt=""
+              className="w-3 h-3 opacity-40"
+              style={{ transform: "scaleX(-1)" }}
+            />
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-/* ── 参考图组件 ── */
-function ReferenceImage({ imageUrl }: { imageUrl: string }) {
+function RefToggle({ imageUrl }: { imageUrl: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="flex flex-col items-center flex-shrink-0">
+    <>
       <button
-        className="text-xs text-gray-400 hover:text-primary"
-        onClick={() => setOpen(!open)}
+        className="px-2.5 py-1 text-xs rounded-lg transition bg-gray-100 text-gray-600 hover:bg-gray-200"
+        onClick={() => setOpen(true)}
       >
-        {open ? "收起参考图" : "查看参考图"}
+        参考图
       </button>
       {open && (
-        <img
-          src={imageUrl}
-          alt="参考图"
-          className="w-32 h-32 object-cover rounded-lg shadow-sm mt-1 border"
-        />
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="relative bg-white rounded-2xl p-3 shadow-xl max-w-[80vh] max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={imageUrl}
+              alt="参考图"
+              className="rounded-xl max-w-full max-h-[75vh] object-contain"
+            />
+            <button
+              className="absolute -top-2 -right-2 w-8 h-8 flex items-center justify-center bg-gray-800 text-white rounded-full text-sm shadow-md hover:bg-gray-700"
+              onClick={() => setOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+function fmt(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }

@@ -24,8 +24,8 @@ interface RenderedPiece {
   offsetY: number;
 }
 
-/** 以固定尺寸渲染，CSS 缩放显示 */
 const REF_SIZE = 600;
+const PAD = 12;
 
 export default function PuzzleBoard({
   pieceStates,
@@ -37,10 +37,9 @@ export default function PuzzleBoard({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const boardCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [boardSize, setBoardSize] = useState(400);
-  const [renderedPieces, setRenderedPieces] = useState<Map<number, RenderedPiece>>(
-    new Map(),
-  );
+  const [containerW, setContainerW] = useState(800);
+  const [containerH, setContainerH] = useState(500);
+  const [renderedPieces, setRenderedPieces] = useState<Map<number, RenderedPiece>>(new Map());
   const parsedEdgesRef = useRef<PieceEdges[][] | null>(null);
   const imageObjRef = useRef<HTMLImageElement | null>(null);
   const [localStates, setLocalStates] = useState<PieceState[]>([]);
@@ -54,188 +53,216 @@ export default function PuzzleBoard({
   } | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [piecesReady, setPiecesReady] = useState(false);
+  const [wrongHint, setWrongHint] = useState<number | null>(null);
 
-  /* ── 自适应拼图区大小 ── */
+  /* ── 等比例布局：左右平分，自适应填满 ── */
+  const availH = containerH - PAD * 2;
+  const availW = containerW - PAD * 2;
+  // 间距随容器宽度自适应（3%~5%），但有上下限
+  const gap = Math.max(16, Math.min(availW * 0.04, 48));
+  // 每个面板最大宽度 = (可用宽度 - 间距) / 2
+  const maxPanel = (availW - gap) / 2;
+  // 棋盘为正方形，受高度和面板宽度共同约束，无硬上限
+  const boardSize = Math.max(120, Math.min(maxPanel, availH));
+  // 居中定位
+  const totalW = boardSize * 2 + gap;
+  const startX = (containerW - totalW) / 2;
+  const trayX = startX;
+  const boardX = startX + boardSize + gap;
+  const boardY = (containerH - boardSize) / 2;
+  const scale = boardSize / REF_SIZE;
+
+  // refs for document event handlers
+  const boardSizeRef = useRef(boardSize);
+  const trayMinXRef = useRef(-1.03);
+  boardSizeRef.current = boardSize;
+  // tray 在 board 坐标系中的范围：x from -(boardSize + gap) / boardSize to 0
+  trayMinXRef.current = -(boardSize + gap) / boardSize - 0.02;
+
+  /* ── 监听容器尺寸 ── */
   useEffect(() => {
     function update() {
       if (!containerRef.current) {
         return;
       }
-      const h = containerRef.current.clientHeight - 30;
-      const w = containerRef.current.clientWidth - 30;
-      setBoardSize(Math.max(250, Math.min(h, w, 560)));
+      setContainerW(containerRef.current.clientWidth);
+      setContainerH(containerRef.current.clientHeight);
     }
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    const ro = new ResizeObserver(update);
+    if (containerRef.current) {
+      ro.observe(containerRef.current);
+    }
+    return () => ro.disconnect();
   }, []);
 
-  /* ── 渲染拼图块图片（固定 REF_SIZE，一次性） ── */
+  /* ── 渲染拼图块图片 ── */
   useEffect(() => {
     if (!imageUrl || edges.length === 0) {
       return;
     }
-
     const parsed = deserializeEdges(edges);
     parsedEdgesRef.current = parsed;
-
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       imageObjRef.current = img;
       const pieces = new Map<number, RenderedPiece>();
-
       for (let r = 0; r < difficulty; r++) {
         for (let c = 0; c < difficulty; c++) {
           const id = r * difficulty + c;
-          const { canvas, offsetX, offsetY } = renderPieceCanvas(
-            img,
-            difficulty,
-            r,
-            c,
-            parsed[r]![c]!,
-            REF_SIZE,
-          );
-          pieces.set(id, {
-            dataUrl: canvas.toDataURL("image/png"),
-            width: canvas.width,
-            height: canvas.height,
-            offsetX,
-            offsetY,
-          });
+          try {
+            const { canvas, offsetX, offsetY } = renderPieceCanvas(
+              img, difficulty, r, c, parsed[r]![c]!, REF_SIZE,
+            );
+            pieces.set(id, {
+              dataUrl: canvas.toDataURL("image/png"),
+              width: canvas.width, height: canvas.height, offsetX, offsetY,
+            });
+          } catch { /* skip */ }
         }
       }
-
       setRenderedPieces(pieces);
       setPiecesReady(true);
     };
     img.src = imageUrl;
   }, [imageUrl, edges, difficulty]);
 
-  /* ── 渲染拼图区域背景轮廓 ── */
+  /* ── 渲染棋盘背景 ── */
   useEffect(() => {
-    if (
-      !boardCanvasRef.current ||
-      !imageObjRef.current ||
-      !parsedEdgesRef.current ||
-      !piecesReady
-    ) {
+    if (!boardCanvasRef.current || !imageObjRef.current || !parsedEdgesRef.current || !piecesReady) {
       return;
     }
-    const canvas = boardCanvasRef.current;
-    canvas.width = boardSize;
-    canvas.height = boardSize;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, boardSize, boardSize);
-    renderBoardOutline(
-      ctx,
-      imageObjRef.current,
-      difficulty,
-      parsedEdgesRef.current,
-      boardSize,
-    );
+    try {
+      const canvas = boardCanvasRef.current;
+      canvas.width = boardSize;
+      canvas.height = boardSize;
+      const ctx = canvas.getContext("2d")!;
+      ctx.clearRect(0, 0, boardSize, boardSize);
+      renderBoardOutline(ctx, imageObjRef.current, difficulty, parsedEdgesRef.current, boardSize);
+    } catch { /* ignore */ }
   }, [boardSize, difficulty, piecesReady]);
 
-  /* ── 同步服务端状态到本地（跳过正在拖拽的块） ── */
+  /* ── 同步服务端状态 ── */
   useEffect(() => {
-    setLocalStates(
-      pieceStates.map((ps) => {
-        if (dragRef.current?.id === ps.id) {
-          return ps; // 拖拽中的块保持本地位置
+    setLocalStates((prev) => {
+      const draggingId = dragRef.current?.id;
+      return pieceStates.map((ps) => {
+        if (ps.id === draggingId) {
+          const local = prev.find((p) => p.id === ps.id);
+          if (local) {
+            return { ...ps, x: local.x, y: local.y };
+          }
         }
-        return ps;
-      }),
-    );
+        return { ...ps };
+      });
+    });
   }, [pieceStates]);
 
-  /* ── 缩放因子 ── */
-  const scale = boardSize / REF_SIZE;
-  const BOARD_X = 15;
-  const BOARD_Y = 15;
-
-  /* ── 拖拽：按下 ── */
-  function handlePointerDown(e: React.PointerEvent, pieceId: number) {
-    if (!canInteract) {
-      return;
-    }
-    const piece = localStates.find((p) => p.id === pieceId);
-    if (!piece || piece.placed) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-
-    dragRef.current = {
-      id: pieceId,
-      pointerId: e.pointerId,
-      startMouseX: e.clientX,
-      startMouseY: e.clientY,
-      startPieceX: piece.x,
-      startPieceY: piece.y,
-    };
-    setDragId(pieceId);
+  // clamp
+  function clampPos(x: number, y: number): [number, number] {
+    const minX = trayMinXRef.current;
+    return [
+      Math.max(minX, Math.min(0.95, x)),
+      Math.max(-0.05, Math.min(0.95, y)),
+    ];
   }
 
-  /* ── 拖拽：移动 ── */
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragRef.current || e.pointerId !== dragRef.current.pointerId) {
+  /* ── 全局 pointer 事件 ── */
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      const drag = dragRef.current;
+      if (!drag || e.pointerId !== drag.pointerId) {
         return;
       }
-      const dx = e.clientX - dragRef.current.startMouseX;
-      const dy = e.clientY - dragRef.current.startMouseY;
-      const newX = dragRef.current.startPieceX + dx / boardSize;
-      const newY = dragRef.current.startPieceY + dy / boardSize;
-
+      const bs = boardSizeRef.current;
+      const dx = e.clientX - drag.startMouseX;
+      const dy = e.clientY - drag.startMouseY;
+      const [nx, ny] = clampPos(drag.startPieceX + dx / bs, drag.startPieceY + dy / bs);
+      const did = drag.id;
       setLocalStates((prev) =>
-        prev.map((p) =>
-          p.id === dragRef.current!.id ? { ...p, x: newX, y: newY } : p,
-        ),
+        prev.map((p) => p.id === did ? { ...p, x: nx, y: ny } : p),
       );
-    },
-    [boardSize],
-  );
+    }
 
-  /* ── 拖拽：松开 ── */
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragRef.current || e.pointerId !== dragRef.current.pointerId) {
+    function onUp(e: PointerEvent) {
+      const drag = dragRef.current;
+      if (!drag || e.pointerId !== drag.pointerId) {
         return;
       }
-      const dx = e.clientX - dragRef.current.startMouseX;
-      const dy = e.clientY - dragRef.current.startMouseY;
-      const finalX = dragRef.current.startPieceX + dx / boardSize;
-      const finalY = dragRef.current.startPieceY + dy / boardSize;
+      const bs = boardSizeRef.current;
+      const dx = e.clientX - drag.startMouseX;
+      const dy = e.clientY - drag.startMouseY;
+      const [fx, fy] = clampPos(drag.startPieceX + dx / bs, drag.startPieceY + dy / bs);
+      const id = drag.id;
 
-      onMovePiece(dragRef.current.id, finalX, finalY);
+      const n = difficulty;
+      const cx = (id % n) / n;
+      const cy = Math.floor(id / n) / n;
+      const onBoard = fx >= -0.05 && fx <= 1.05 && fy >= -0.05 && fy <= 1.05;
+      const isCorrect = Math.abs(fx - cx) < 0.08 && Math.abs(fy - cy) < 0.08;
+
+      if (onBoard && !isCorrect) {
+        setWrongHint(id);
+        setTimeout(() => setWrongHint((cur) => (cur === id ? null : cur)), 800);
+      }
+
+      onMovePiece(id, fx, fy);
       dragRef.current = null;
       setDragId(null);
+    }
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+  }, [difficulty, onMovePiece]);
+
+  /* ── 拖拽：按下 ── */
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent, pieceId: number) => {
+      if (!canInteract) {
+        return;
+      }
+      const piece = localStates.find((p) => p.id === pieceId);
+      if (!piece || piece.placed) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* */ }
+      dragRef.current = {
+        id: pieceId, pointerId: e.pointerId,
+        startMouseX: e.clientX, startMouseY: e.clientY,
+        startPieceX: piece.x, startPieceY: piece.y,
+      };
+      setDragId(pieceId);
+      setWrongHint(null);
     },
-    [boardSize, onMovePiece],
+    [canInteract, localStates],
   );
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex-1 w-full"
-      style={{ minHeight: boardSize + 30 }}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-    >
-      {/* 拼图区域背景（模糊轮廓） */}
+    <div ref={containerRef} className="absolute inset-0">
+      {/* 左侧：散落区（拼图槽） */}
+      <div
+        className="absolute"
+        style={{
+          left: trayX, top: boardY, width: boardSize, height: boardSize,
+          borderRadius: 10, border: "2px dashed #e2e8f0",
+          background: "rgba(248,250,252,0.6)",
+        }}
+      />
+
+      {/* 右侧：棋盘（目标区域） */}
       <canvas
         ref={boardCanvasRef}
         style={{
-          position: "absolute",
-          left: BOARD_X,
-          top: BOARD_Y,
-          width: boardSize,
-          height: boardSize,
-          borderRadius: 8,
-          border: "2px dashed rgba(99, 102, 241, 0.25)",
-          background: "rgba(248, 250, 252, 0.8)",
+          position: "absolute", left: boardX, top: boardY,
+          width: boardSize, height: boardSize, borderRadius: 10,
+          border: "2px dashed #c7d2fe", background: "rgba(238,242,255,0.4)",
         }}
       />
 
@@ -245,10 +272,11 @@ export default function PuzzleBoard({
         if (!rp) {
           return null;
         }
-
-        const pixelX = BOARD_X + piece.x * boardSize + rp.offsetX * scale;
-        const pixelY = BOARD_Y + piece.y * boardSize + rp.offsetY * scale;
+        // boardX 为坐标原点，piece.x < 0 在棋盘左侧（散落区）
+        const pixelX = boardX + piece.x * boardSize + rp.offsetX * scale;
+        const pixelY = boardY + piece.y * boardSize + rp.offsetY * scale;
         const isDragging = dragId === piece.id;
+        const isWrong = wrongHint === piece.id;
 
         return (
           <img
@@ -257,28 +285,25 @@ export default function PuzzleBoard({
             alt=""
             style={{
               position: "absolute",
-              left: pixelX,
-              top: pixelY,
-              width: rp.width * scale,
-              height: rp.height * scale,
+              left: pixelX, top: pixelY,
+              width: rp.width * scale, height: rp.height * scale,
               zIndex: isDragging ? 1000 : piece.placed ? 1 : 10,
               cursor: canInteract && !piece.placed
-                ? isDragging
-                  ? "grabbing"
-                  : "grab"
-                : "default",
+                ? isDragging ? "grabbing" : "grab" : "default",
               filter: piece.placed
-                ? "drop-shadow(0 0 4px rgba(16, 185, 129, 0.6))"
-                : isDragging
-                  ? "drop-shadow(0 4px 10px rgba(0,0,0,0.35))"
-                  : "drop-shadow(0 2px 4px rgba(0,0,0,0.2))",
-              transform: isDragging ? "scale(1.06)" : "scale(1)",
+                ? "drop-shadow(0 0 5px rgba(34,197,94,0.5))"
+                : isWrong
+                  ? "drop-shadow(0 0 6px rgba(239,68,68,0.6))"
+                  : isDragging
+                    ? "drop-shadow(0 4px 10px rgba(0,0,0,0.3))"
+                    : "drop-shadow(0 2px 4px rgba(0,0,0,0.15))",
+              transform: isDragging ? "scale(1.06)" : isWrong ? "scale(1.03)" : "scale(1)",
               transition: isDragging
                 ? "transform 0.1s, filter 0.1s"
-                : "left 0.15s ease, top 0.15s ease, transform 0.15s, filter 0.15s",
+                : "left 0.15s ease, top 0.15s ease, transform 0.2s, filter 0.2s",
               pointerEvents: canInteract && !piece.placed ? "auto" : "none",
-              userSelect: "none",
-              touchAction: "none",
+              userSelect: "none", touchAction: "none",
+              opacity: piece.placed ? 0.95 : 1,
             }}
             onPointerDown={(e) => handlePointerDown(e, piece.id)}
             draggable={false}
