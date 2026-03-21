@@ -204,7 +204,17 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
           break;
         case "transferDone":
           setUploaderId(msg.uploaderId);
-          addSystemMsg("出图者已更换");
+          setPhase("uploading");
+          setPieceStates([]);
+          setEdges([]);
+          setImageReady(false);
+          setImageUrl(null);
+          setStartTime(null);
+          setMoveCount(0);
+          setElapsed(0);
+          setSolveResult(null);
+          setShowConfetti(false);
+          addSystemMsg("出图者已更换，等待上传新图片");
           break;
         case "playAgainStarted":
           setPhase("uploading");

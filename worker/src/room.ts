@@ -508,8 +508,27 @@ export class PuzzleRoom extends DurableObject {
     if (!other) {
       return;
     }
+    // 清除旧图片
+    if (this.imageChunks > 0) {
+      const keys: string[] = [];
+      for (let i = 0; i < this.imageChunks; i++) {
+        keys.push(`img_${i}`);
+      }
+      await this.ctx.storage.delete(keys);
+    }
     this.uploaderId = other.id;
-    await this.save({ uploaderId: other.id });
+    this.phase = "uploading";
+    this.pieceStates = [];
+    this.edges = [];
+    this.imageReady = false;
+    this.imageChunks = 0;
+    this.startTime = null;
+    this.moveCount = 0;
+    await this.save({
+      uploaderId: other.id, phase: "uploading",
+      pieceStates: [], edges: [], imageReady: false,
+      imageChunks: 0, startTime: null, moveCount: 0,
+    });
     this.broadcast({ type: "transferDone", uploaderId: other.id });
   }
 
