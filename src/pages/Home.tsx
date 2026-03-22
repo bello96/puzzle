@@ -22,10 +22,9 @@ export default function Home({ onEnterRoom, urlError }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const valid = nickname.trim().length > 0;
-
   async function createRoom() {
-    if (!valid) {
+    if (!nickname.trim()) {
+      setError("请输入昵称");
       return;
     }
     setLoading(true);
@@ -45,7 +44,12 @@ export default function Home({ onEnterRoom, urlError }: Props) {
   }
 
   async function joinRoom() {
-    if (!valid || joinCode.length !== 6) {
+    if (!nickname.trim()) {
+      setError("请输入昵称");
+      return;
+    }
+    if (joinCode.length !== 6) {
+      setError("请输入6位房间号");
       return;
     }
     setLoading(true);
@@ -97,12 +101,14 @@ export default function Home({ onEnterRoom, urlError }: Props) {
           placeholder="输入你的昵称"
           maxLength={12}
           value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
+          onChange={(e) => {
+            setNickname(e.target.value);
+            setError("");
+          }}
         />
 
         <button
-          className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 mb-6"
-          disabled={!valid || loading}
+          className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition mb-6"
           onClick={createRoom}
         >
           {loading ? "请稍候..." : "创建房间"}
@@ -119,7 +125,10 @@ export default function Home({ onEnterRoom, urlError }: Props) {
           placeholder="房间号"
           maxLength={6}
           value={joinCode}
-          onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ""))}
+          onChange={(e) => {
+            setJoinCode(e.target.value.replace(/\D/g, ""));
+            setError("");
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               joinRoom();
@@ -127,8 +136,7 @@ export default function Home({ onEnterRoom, urlError }: Props) {
           }}
         />
         <button
-          className="w-full py-3 px-4 bg-white text-indigo-600 font-semibold rounded-lg border-2 border-indigo-600 hover:bg-indigo-50 transition disabled:opacity-50"
-          disabled={!valid || joinCode.length !== 6 || loading}
+          className="w-full py-3 px-4 bg-white text-indigo-600 font-semibold rounded-lg border-2 border-indigo-600 hover:bg-indigo-50 transition"
           onClick={joinRoom}
         >
           加入房间
