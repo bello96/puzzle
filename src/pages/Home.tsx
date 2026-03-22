@@ -13,7 +13,9 @@ export default function Home({ onEnterRoom, urlError }: Props) {
       if (raw) {
         return (JSON.parse(raw) as { nickname?: string }).nickname || "";
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return "";
   });
   const [joinCode, setJoinCode] = useState("");
@@ -74,7 +76,7 @@ export default function Home({ onEnterRoom, urlError }: Props) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-[#eff2ff]">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <h1 className="text-4xl font-bold text-center mb-2 text-indigo-600">
           🧩 拼图对战
