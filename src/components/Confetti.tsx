@@ -1,15 +1,22 @@
 import { useEffect, useState } from "react";
 
-const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"];
-const PARTICLE_COUNT = 60;
+const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#f97316", "#14b8a6"];
+const PARTICLE_COUNT = 80;
 
 interface Particle {
   id: number;
-  x: number;
+  // 起始位置（左下或右下）
+  side: "left" | "right";
+  // 发射角度偏移（围绕45度的随机扰动）
+  angle: number;
+  // 发射速度（决定飞多远）
+  speed: number;
   color: string;
   delay: number;
   duration: number;
   size: number;
+  shape: "circle" | "rect" | "strip";
+  spin: number;
 }
 
 export default function Confetti({ show }: { show: boolean }) {
@@ -21,14 +28,23 @@ export default function Confetti({ show }: { show: boolean }) {
       return;
     }
     setParticles(
-      Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
-        delay: Math.random() * 1.5,
-        duration: 2 + Math.random() * 2,
-        size: 6 + Math.random() * 8,
-      }))
+      Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+        const side = i < PARTICLE_COUNT / 2 ? "left" : "right";
+        const shapes = ["circle", "rect", "strip"] as const;
+        return {
+          id: i,
+          side,
+          // 45度 ± 25度 的随机扰动
+          angle: 45 + (Math.random() - 0.5) * 50,
+          speed: 0.5 + Math.random() * 0.7,
+          color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
+          delay: Math.random() * 0.6,
+          duration: 1.8 + Math.random() * 1.5,
+          size: 6 + Math.random() * 7,
+          shape: shapes[Math.floor(Math.random() * shapes.length)]!,
+          spin: 360 + Math.random() * 720,
+        };
+      }),
     );
   }, [show]);
 
@@ -38,27 +54,61 @@ export default function Confetti({ show }: { show: boolean }) {
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
-      <style>{`
-        @keyframes confetti-fall {
-          0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-        }
-      `}</style>
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          style={{
-            position: "absolute",
-            left: `${p.x}%`,
-            top: 0,
-            width: p.size,
-            height: p.size,
-            backgroundColor: p.color,
-            borderRadius: Math.random() > 0.5 ? "50%" : "2px",
-            animation: `confetti-fall ${p.duration}s ${p.delay}s ease-in forwards`,
-          }}
-        />
-      ))}
+      {particles.map((p) => {
+        // 从左下或右下发射，45度向上
+        const rad = (p.angle * Math.PI) / 180;
+        const distX = Math.cos(rad) * p.speed * 120; // vw
+        const distY = Math.sin(rad) * p.speed * 120;  // vh
+
+        const startX = p.side === "left" ? -2 : 102; // 起点 %
+        const startY = 102;
+        const dirX = p.side === "left" ? 1 : -1;
+
+        const endX = startX + dirX * distX;
+        const endY = startY - distY;
+
+        const borderRadius = p.shape === "circle" ? "50%" : "2px";
+        const w = p.shape === "strip" ? p.size * 0.4 : p.size;
+        const h = p.shape === "strip" ? p.size * 1.8 : p.size;
+
+        return (
+          <div
+            key={p.id}
+            style={{
+              position: "absolute",
+              left: `${startX}%`,
+              top: `${startY}%`,
+              width: w,
+              height: h,
+              backgroundColor: p.color,
+              borderRadius,
+              opacity: 0,
+              animation: `confetti-burst-${p.id} ${p.duration}s ${p.delay}s ease-out forwards`,
+            }}
+          >
+            <style>{`
+              @keyframes confetti-burst-${p.id} {
+                0% {
+                  transform: translate(0, 0) rotate(0deg) scale(0.3);
+                  opacity: 1;
+                }
+                20% {
+                  opacity: 1;
+                  transform: translate(${endX * 0.6}vw, ${(endY - startY) * 0.6}vh) rotate(${p.spin * 0.4}deg) scale(1);
+                }
+                60% {
+                  opacity: 0.9;
+                  transform: translate(${endX * 0.95}vw, ${(endY - startY) * 0.85}vh) rotate(${p.spin * 0.8}deg) scale(0.9);
+                }
+                100% {
+                  opacity: 0;
+                  transform: translate(${endX}vw, ${(endY - startY) * 1.1 + 20}vh) rotate(${p.spin}deg) scale(0.5);
+                }
+              }
+            `}</style>
+          </div>
+        );
+      })}
     </div>
   );
 }
