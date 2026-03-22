@@ -52,7 +52,7 @@ export default function PuzzleBoard({
     startPieceY: number;
   } | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
-  const [piecesReady, setPiecesReady] = useState(false);
+  const [renderKey, setRenderKey] = useState(0); // 每次重新渲染拼图块时递增
   const [wrongHint, setWrongHint] = useState<number | null>(null);
 
   /* ── 等比例布局：左右平分，自适应填满 ── */
@@ -123,14 +123,14 @@ export default function PuzzleBoard({
         }
       }
       setRenderedPieces(pieces);
-      setPiecesReady(true);
+      setRenderKey((k) => k + 1);
     };
     img.src = imageUrl;
   }, [imageUrl, edges, difficulty]);
 
-  /* ── 渲染棋盘背景 ── */
+  /* ── 渲染棋盘背景（renderKey 变化时重绘，确保与拼图块边缘一致） ── */
   useEffect(() => {
-    if (!boardCanvasRef.current || !imageObjRef.current || !parsedEdgesRef.current || !piecesReady) {
+    if (!boardCanvasRef.current || !imageObjRef.current || !parsedEdgesRef.current || renderKey === 0) {
       return;
     }
     try {
@@ -141,7 +141,7 @@ export default function PuzzleBoard({
       ctx.clearRect(0, 0, boardSize, boardSize);
       renderBoardOutline(ctx, imageObjRef.current, difficulty, parsedEdgesRef.current, boardSize);
     } catch { /* ignore */ }
-  }, [boardSize, difficulty, piecesReady]);
+  }, [boardSize, difficulty, renderKey]);
 
   /* ── 同步服务端状态 ── */
   useEffect(() => {
@@ -200,7 +200,7 @@ export default function PuzzleBoard({
       const cx = (id % n) / n;
       const cy = Math.floor(id / n) / n;
       const onBoard = fx >= -0.05 && fx <= 1.05 && fy >= -0.05 && fy <= 1.05;
-      const isCorrect = Math.abs(fx - cx) < 0.08 && Math.abs(fy - cy) < 0.08;
+      const isCorrect = Math.abs(fx - cx) < 0.04 && Math.abs(fy - cy) < 0.04;
 
       if (onBoard && !isCorrect) {
         setWrongHint(id);

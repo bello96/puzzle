@@ -43,7 +43,7 @@ const QUICK_GRACE = 5_000;
 const INACTIVITY_TIMEOUT = 5 * 60_000;
 const MAX_CHAT_HISTORY = 200;
 const IMAGE_CHUNK_SIZE = 100_000;
-const SNAP_THRESHOLD = 0.06; // 拼图吸附阈值（归一化坐标）
+const SNAP_THRESHOLD = 0.035; // 拼图吸附阈值（归一化坐标）
 
 /* ── PuzzleRoom Durable Object ── */
 export class PuzzleRoom extends DurableObject {
@@ -365,12 +365,17 @@ export class PuzzleRoom extends DurableObject {
     const d = Math.max(3, Math.min(6, Math.floor(difficulty)));
     const total = d * d;
     const edges = generateEdges(d);
+    // 散落范围根据难度计算，确保拼图块（含凸出部分）不越界到棋盘
+    const pieceW = 1 / d;
+    const tabW = pieceW * 0.22;
+    const maxX = -(pieceW + tabW) - 0.06; // 右边界：块宽+凸出+间距
+    const minX = -0.97;
     const pieceStates: PieceState[] = [];
     for (let i = 0; i < total; i++) {
       pieceStates.push({
         id: i,
-        x: -0.97 + Math.random() * 0.87,  // -0.97 ~ -0.10，不覆盖棋盘
-        y: 0.02 + Math.random() * 0.88,  // 0.02 ~ 0.90
+        x: minX + Math.random() * (maxX - minX),
+        y: 0.02 + Math.random() * 0.88,
         placed: false,
       });
     }
